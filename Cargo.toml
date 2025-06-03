@@ -15,6 +15,12 @@ path = "src/mutex/main.rs"
 name = "channel"
 path = "src/channel/main.rs"
 
+[[bin]]
+name = "server"
+path = "src/axum/server.rs"
+
 [dependencies]
+axum = "0.8.4"
 rand = "0.3.14"
 tokio = { version = "1", features = ["full"] }
+tower-http = "0.6.6"
