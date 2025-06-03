@@ -1,0 +1,20 @@
+[package]
+name = "learn-rust"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "async"
+path = "src/async/main.rs"
+
+[[bin]]
+name = "mutex"
+path = "src/mutex/main.rs"
+
+[[bin]]
+name = "channel"
+path = "src/channel/main.rs"
+
+[dependencies]
+rand = "0.3.14"
+tokio = { version = "1", features = ["full"] }
