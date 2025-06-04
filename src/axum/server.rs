@@ -1,10 +1,5 @@
 use axum::{
-    response::{Html, IntoResponse},
-    routing::get,
-    Router,
-    http::StatusCode,
-    extract::Request,
-    body::Body
+    body::Body, extract::Request, http::StatusCode, response::{Html, IntoResponse}, routing::{get, post}, Router
 };
 use tower_http::services::{ServeDir, ServeFile};
 use std::{panic::UnwindSafe, path::PathBuf};
@@ -12,7 +7,8 @@ use std::env;
 use tower_http::trace::TraceLayer;
 use learn_rust::db::mysql;
 use dotenvy;
-use learn_rust::router;
+use learn_rust::router::router::todo_routes;
+use learn_rust::handle;
 
 #[tokio::main]
 async fn main() {
@@ -48,6 +44,7 @@ async fn main() {
     let app = Router::new()
         // API 示例端点
         .route("/api/hello", get(hello_api))
+        // .route("/todo/create", post(handle::todo::create_todo))
         // 静态资源服务
         .nest_service("/static", ServeDir::new(&static_path))
         // 路由示例
@@ -59,7 +56,7 @@ async fn main() {
         // 回退服务（确保正确处理文件服务）
         .fallback_service(serve_dir.clone());
 
-    let app = router::router::Router(app);
+    let app = todo_routes(app);
 
     // 5. 启动服务器
     let addr = "127.0.0.1:3000";
