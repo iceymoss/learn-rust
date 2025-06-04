@@ -7,14 +7,23 @@ use axum::{
     body::Body
 };
 use tower_http::services::{ServeDir, ServeFile};
-use std::path::PathBuf;
+use std::{panic::UnwindSafe, path::PathBuf};
 use std::env;
 use tower_http::trace::TraceLayer;
+use learn_rust::db::mysql;
+use dotenvy;
+use learn_rust::router;
 
 #[tokio::main]
 async fn main() {
+    // 加载配置
+    dotenvy::dotenv().ok(); // 加载 .env 文件
+
     // 导入日志
     tracing_subscriber::fmt::init();
+
+    // 初始化db
+    let _db =  mysql::init().await.expect("db 初始化失败");
 
     let project_root = env::current_dir().expect("Failed to get current directory");
     
@@ -49,6 +58,8 @@ async fn main() {
         .fallback(get(handle_spa_fallback))
         // 回退服务（确保正确处理文件服务）
         .fallback_service(serve_dir.clone());
+
+    let app = router::router::Router(app);
 
     // 5. 启动服务器
     let addr = "127.0.0.1:3000";
