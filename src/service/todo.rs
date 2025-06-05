@@ -1,10 +1,10 @@
 // 文件: src/todo_service.rs
 // 业务逻辑层 - ToDo相关的操作
 
-use crate::{db, entities::todo};
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, EntityTrait, Insert, QueryFilter, QueryOrder, TryIntoModel
-};
+use std::ops::Add;
+use std::slice::SliceIndex;
+use crate::{db, entities::todo, dto};
+use sea_orm::{ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, Insert, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, TryIntoModel};
 use anyhow::{Result, anyhow}; // 统一错误处理
 
 // 创建新任务
@@ -56,6 +56,104 @@ pub async fn ceate(description: &str) -> Result<todo::Model> {
             println!("创建待办事项失败{:?}", e);
             Err(anyhow!("创建待办事项失败: {}", e))
         }
+    }
+}
+
+pub struct TodoList {
+    pub list: Vec<todo::Model>,
+    pub total: i32,
+}
+
+pub async fn list_todo(input: dto::todo::ListTodoReq) -> Result<TodoList> {
+    let db = db::mysql::get_connection();
+    
+    let mut todo_query = todo::Entity::find();
+    
+    let total_query = todo_query.clone();
+    let total = total_query.count(db).await?;
+    
+    if input.state == 1 {
+        // 所有权需要重新给到todo_query
+        todo_query = todo_query.filter(todo::Column::Completed.eq(1));
+    } else if input.state == 2 {
+        todo_query = todo_query.filter(todo::Column::Completed.eq(0));
+    }
+
+    // 计算偏移量, 类型转换
+    let offset: u64 = ((input.page - 1) * input.page_size) as u64;
+    let query = todo_query.offset(offset).limit(input.page_size as u64);
+    
+    let res = query.all(db).await;
+    match res { 
+        Ok(data) => {
+            let ans = TodoList {
+                list: data,
+                total: total as i32,
+            };
+            Ok(ans)
+        }
+        Err(e) => {
+            println!("获取待办事项列表失败{:?}", e);
+            Err(anyhow!("获取待办事项列表失败{:?}", e))
+        }
+    }
+}
+
+pub async fn get_todo(id: i32) -> Result<todo::Model> {
+    let db = db::mysql::get_connection();
+    let res = todo::Entity::find_by_id(id).one(db).await;
+    match res {
+        Ok(data) => {
+            match data { 
+                Some(d) => {
+                    Ok(d)
+                }
+                None => {
+                    Ok(todo::Model{..data.unwrap()})
+                }
+            }
+        }
+        Err(e) => {
+            println!("获取待办事项失败{:?}", e);
+            Err(anyhow!("获取待办事项失败{:?}", e))
+        }
+    }
+}
+
+pub async fn delete_todo(id: i32) -> Result<()> {
+    let db = db::mysql::get_connection();
+    let _todo = todo::Entity::find_by_id(id).one(db).await.unwrap().ok_or(DbErr::RecordNotFound(format!("该待办事项 {} 不存在", id)))?;
+    
+    let delete_result = todo::Entity::delete_by_id(id).exec(db).await;
+    match delete_result {
+        Ok(_) => {
+            Ok(())
+        }
+        Err(e) => {
+            println!("移除待办事项失败{:?}", e);
+            Err(anyhow!("移除待办事项失败{:?}", e))
+        }
+    }
+}
+
+pub async fn update_todo(input: dto::todo::UpdateTodo) -> Result<()> {
+    let db = db::mysql::get_connection();
+    let todo_temp = todo::Entity::find_by_id(input.id).one(db).await.unwrap().ok_or(DbErr::RecordNotFound(format!("该待办事项 {} 不存在", input.id)))?;
+    let mut completed: bool = false;
+    if input.completed == 1 {
+        completed = true;
+    }
+    let data = todo::ActiveModel {
+        id: sea_orm::Set(todo_temp.id),
+        description: sea_orm::Set(input.description),
+        completed: sea_orm::Set(completed),
+        created_at: sea_orm::Set(todo_temp.created_at),
+        ..Default::default() // 其他字段使用默认值
+    };
+    let resp = todo::Entity::update(data).exec(db).await;
+    match resp {
+        Ok(_) => Ok(()),
+        Err(e) => Err(anyhow!("更新待办事项失败{:?}", e))
     }
 }
 
