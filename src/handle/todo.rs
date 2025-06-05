@@ -85,7 +85,7 @@ pub async fn get_todo(Path(id): Path<i32>) -> Result<Json<todo::CreateTodoResp>,
             Ok(Json(res))
         }
         Err(e) => {
-            println!("获取待办事项失败: {:?}", e);
+            println!("获取待办事项失败 {:?}", e.to_string());
             Err((http::StatusCode::INTERNAL_SERVER_ERROR, "获取待办事项失败".to_string()))
         }
     }
