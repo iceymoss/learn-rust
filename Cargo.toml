@@ -19,6 +19,10 @@ path = "src/channel/main.rs"
 name = "server"
 path = "src/axum/server.rs"
 
+[[bin]]
+name = "hello"
+path = "src/test/main.rs"
+
 [dependencies]
 axum = "0.7"
 rand = "0.3.14"
