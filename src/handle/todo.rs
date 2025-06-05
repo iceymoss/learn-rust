@@ -1,7 +1,7 @@
 use axum::http;
 use axum::Json;
 use crate::{dto::todo, service};
-use axum::extract::{Path, Query};
+use axum::extract::Path;
 
 pub async fn create_todo(input: Json<todo::CreateTodoReq>) -> Result<Json<todo::CreateTodoResp>, (http::StatusCode, String)> {
     if input.description.is_empty() {
@@ -21,6 +21,7 @@ pub async fn create_todo(input: Json<todo::CreateTodoReq>) -> Result<Json<todo::
             Ok(Json(res))
         }
         Err(e) => {
+            println!("创建失败: {:?}", e);
             Err((http::StatusCode::INTERNAL_SERVER_ERROR, "创建失败".to_string()))
         }
     }
@@ -60,6 +61,7 @@ pub async fn list_todo(mut input: Json<todo::ListTodoReq>) -> Result<Json<todo::
             Ok(Json(res))
         }
         Err(e) => {
+            println!("获取待办事项列表失败: {:?}", e);
             Err((http::StatusCode::INTERNAL_SERVER_ERROR, "获取待办事项列表失败".to_string()))
         }
     }
@@ -83,6 +85,7 @@ pub async fn get_todo(Path(id): Path<i32>) -> Result<Json<todo::CreateTodoResp>,
             Ok(Json(res))
         }
         Err(e) => {
+            println!("获取待办事项失败: {:?}", e);
             Err((http::StatusCode::INTERNAL_SERVER_ERROR, "获取待办事项失败".to_string()))
         }
     }
@@ -96,7 +99,10 @@ pub async fn delete_todo(Path(id): Path<i32>) -> Result<Json<()>, (http::StatusC
     let resp = service::todo::delete_todo(id).await;
     match resp {
         Ok(_) => Ok(Json(())),
-        Err(e) => Err((http::StatusCode::INTERNAL_SERVER_ERROR, "移除待办事项失败".to_string())),
+        Err(e) => {
+            println!("移除待办事项失败{:?}", e);
+            Err((http::StatusCode::INTERNAL_SERVER_ERROR, "移除待办事项失败".to_string()))
+        },
     }
 }
 
@@ -116,6 +122,9 @@ pub async fn update_todo(input: Json<todo::UpdateTodo>) -> Result<Json<()>, (htt
     }).await;
     match resp {
         Ok(_) => Ok(Json(())),
-        Err(e) => Err((http::StatusCode::INTERNAL_SERVER_ERROR, "移除待办事项失败".to_string())),
+        Err(e) => {
+            println!("移除待办事项失败{:?}", e);
+            Err((http::StatusCode::INTERNAL_SERVER_ERROR, "移除待办事项失败".to_string()))
+        },
     }
 }

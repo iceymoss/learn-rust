@@ -1,14 +1,13 @@
 use axum::{
-    body::Body, extract::Request, http::StatusCode, response::{Html, IntoResponse}, routing::{get, post}, Router
+    body::Body, extract::Request, http::StatusCode, response::{Html, IntoResponse}, routing::get, Router
 };
 use tower_http::services::{ServeDir, ServeFile};
-use std::{panic::UnwindSafe, path::PathBuf};
+use std::path::PathBuf;
 use std::env;
 use tower_http::trace::TraceLayer;
 use learn_rust::db::mysql;
 use dotenvy;
 use learn_rust::router::router::todo_routes;
-use learn_rust::handle;
 
 #[tokio::main]
 async fn main() {
@@ -77,7 +76,7 @@ async fn hello_page() -> impl IntoResponse {
 }
 
 // SPA 回退处理
-async fn handle_spa_fallback(request: Request<Body>) -> impl IntoResponse {
+async fn handle_spa_fallback(_request: Request<Body>) -> impl IntoResponse {
     let project_root = PathBuf::from("/Users/iceymoss/project/learn-rust");
     let index_path = project_root.join("static/index.html");
     

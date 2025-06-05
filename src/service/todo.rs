@@ -1,10 +1,8 @@
 // 文件: src/todo_service.rs
 // 业务逻辑层 - ToDo相关的操作
 
-use std::ops::Add;
-use std::slice::SliceIndex;
 use crate::{db, entities::todo, dto};
-use sea_orm::{ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, Insert, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, TryIntoModel};
+use sea_orm::{ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, PaginatorTrait, QueryFilter, QuerySelect};
 use anyhow::{Result, anyhow}; // 统一错误处理
 
 // 创建新任务
