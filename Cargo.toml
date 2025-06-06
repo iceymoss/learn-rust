@@ -31,6 +31,10 @@ path = "src/test/main.rs"
 name = "cli"
 path = "src/cli/cli.rs"
 
+[[bin]]
+name = "task"
+path = "src/tasks/task.rs"
+
 [dependencies]
 axum = "0.7"
 rand = "0.3.14"
@@ -66,3 +70,5 @@ dns-lookup = "1.0"
 env_logger = "0.11.8"
 log = "0.4.27"    # 域名解析
 surge-ping = "0.8.2"  # 使用实际存在的版本
+
+tokio-cron-scheduler = "0.14.0"  # 定时任务

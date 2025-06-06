@@ -1,10 +1,10 @@
-struct Dog {
+struct Person {
     name: String,
     age: i8
 }
 
 fn main() {
-    let mydog = Dog {
+    let p = Person {
         name:String::from("wangcai"), //String在堆空间中
         age:3,
     };
@@ -13,7 +13,7 @@ fn main() {
     // let str = mydog.name;
 
     // 这里使用clone来处理，会创建mydog.name的一个副本
-    let str: String = mydog.name.clone();
-    println!("str={}", str);
-    println!("mydog: name={},age={}", mydog.name, mydog.age);
+    // let str: String = p.name.clone();
+    // println!("str={}", str);
+    println!("person: name={},age={}", p.name, p.age);
 }

@@ -22,6 +22,8 @@ fn main() {
         for i in &list { // 不可变借用
             println!("{}", i);
         }
+
+        // let l = list;
     }
 
     {
@@ -33,7 +35,7 @@ fn main() {
     }
 
     let list1 = list.clone();
-    let list2 = list.clone();
+    let mut list2 = list.clone();
 
     {
         for i in list { // 会移动所有权
@@ -41,11 +43,14 @@ fn main() {
         }
     }
 
+    // let l = list;
+
 
     let res_list = select_sort(list1);
     println!("{:?}", res_list);
 
-    println!("{:?}", select_sort1(list2))
+    select_sort1(&mut list2);
+    println!("{:?}", list2);
 
 
 }

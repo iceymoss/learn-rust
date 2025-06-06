@@ -1,7 +1,8 @@
 
 #[derive(Debug)]
 enum Book {
-    Papery, Electronic
+    Papery,
+    Electronic
 }
 
 fn main() {
