@@ -24,6 +24,10 @@ impl Rectangle {
     fn wider(&self, rect: &Rectangle) -> bool {
         self.width > rect.width
     }
+
+    fn are1(rectangle: &Rectangle) -> u32 {
+        self.width * self.height
+    }
 }
 
 fn main() {

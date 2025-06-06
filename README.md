@@ -912,6 +912,115 @@ fn safe_divide(a: i32, b: i32) -> Result<i32, String> {
 }
 ```
 
+### 方法
+我们在go中都知道方法这个概念，rust本身不是面向对象的语言，但是我们也可以为其添加方法，这一点我觉得和go很像，为一个结构体实现方法使用关键字```impl```, 下面来看示例，我们定义一个矩形，结构体，为其实现了几个方法：
+```rust 
+#[derive(Debug)] // rust使用这种注解的方式来为结构体添加约束或者实现某一个trait, 后续会说到trait这个概念
+struct Rectangle {
+    width: u32,
+    height: u32,
+}
+
+impl Rectangle {
+    fn create(width: u32, height: u32) -> Rectangle { //这种在impl Rectangle 作用域的但是没有传入self我们管叫关联函数，他不是这个结构体的方法，他类似go的工厂函数，cpp的构造函数
+        Rectangle { width, height }
+    }
+
+    fn area(&self) -> u32 {
+        self.width * self.height
+    }
+    // 可以看到&self这里其实就是语法糖，你可以理解为以下写法：
+    // fn area(rectangle: &Rectangle) -> u32 {
+    //     self.width * self.height
+    // }
+
+    fn perimeter(&self) -> u32 {
+        (self.width + self.height) * 2
+    }
+
+    fn heighter(&self, rect: &Rectangle) -> bool {
+        self.height > rect.height
+    }
+
+    fn wider(&self, rect: &Rectangle) -> bool {
+        self.width > rect.width
+    }
+}
+
+fn main() {
+    let rect1 = Rectangle { width: 30, height: 50 };
+    println!("rect1's area is {}", rect1.area());
+    println!("rect1's perimeter {}", rect1.perimeter());
+
+    let rect2 = Rectangle { width: 100, height: 40 };
+    println!("rect2 wider > rect2 wider: {}", rect2.wider(&rect1));
+    println!("rect2 heigher > rect1 heigher {}", rect2.heighter(&rect1));
+
+    let rect3 = Rectangle::create(10, 20);
+    println!("rect3's is {:?}", rect3);
+}
+
+```
+
+### 模块
+我们使用```mod```关键字来表示一个模块，一个模块是否对外使用，这里什么引出了公有和私有性，比如说我们来定义一个模块
+```rust
+
+mod nation {                  // 定义模块 nation
+    pub mod government {      // 子模块 government（公开）
+        pub fn govern() {}    // 公开函数
+    }
+
+    mod congress {            // 子模块 congress（私有）
+        pub fn legislate() {} // 函数虽标记为 pub，但受模块可见性限制
+    }
+
+    mod court {               // 子模块 court（私有）
+        fn judicial() {       // 私有函数
+            super::congress::legislate(); // 调用兄弟模块的函数
+        }
+    }
+}
+
+fn main() {
+    nation::government::govern();
+    nation::congress::legislate();
+}
+```
+或者你可以运行看看结果
+继续看示例：
+```rust
+mod module_a {
+    pub trait Shape {
+        fn play(&self) {
+            println!("1");
+        }
+    }
+
+    pub struct A;
+    impl Shape for A {}
+}
+
+pub mod module_b {
+    use super::module_a::Shape;
+    use super::module_a::A;  // 这里只引入了另一个模块中的类型
+
+     pub fn doit() {
+        let a = A;
+        a.play();
+    }
+}
+
+fn main() {
+    module_b::doit();
+}
+
+```
+
+### 总结
+这里我们快速的过来一遍rust的基础语法，从基础数据类型，复合数据类型，流程控制和函数，看上去其实也不难的是吧，不过别担心，这里的内容只是
+
+
 
 
 
