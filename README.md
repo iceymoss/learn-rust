@@ -1444,6 +1444,442 @@ graph LR
     end
 ```
 
+### cargo
+cargo是rust的依赖依赖管理，但是功能远比依赖管理强，你可以看这一篇文章：https://learnku.com/articles/90035
+
+### 所有权
+接下来来从始至终都贯穿rust的所有权，这里rust最核心的内容之一，首先我们要知道一个问题，为什么rust要使用所有权？先来看这个示例：
+```rust
+fn main() {
+    let mut list = vec![10, 2, 111, 34, 12, 43];
+    for i in list { // 会移动所有权
+        println!("{}", i);
+    }
+
+    let l = list; // 注意这里
+}
+```
+当我们编译时就会发现：
+```
+> rustc range.rs
+error[E0382]: use of moved value: `list`
+   --> range.rs:44:14
+    |
+19  |     let list = vec![10, 2, 111, 34, 12, 43];
+    |         ---- move occurs because `list` has type `Vec<i32>`, which does not implement the `Copy` trait
+...
+39  |         for i in list { // 会移动所有权
+    |                  ---- `list` moved due to this implicit call to `.into_iter()`
+...
+44  |     let _l = list;
+    |              ^^^^ value used here after move
+    |
+note: `into_iter` takes ownership of the receiver `self`, which moves `list`
+   --> /home/jeff/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/collect.rs:313:18
+    |
+313 |     fn into_iter(self) -> Self::IntoIter;
+    |                  ^^^^
+help: consider iterating over a slice of the `Vec<i32>`'s content to avoid moving into the `for` loop
+    |
+39  |         for i in &list { // 会移动所有权
+    |                  +
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0382`.
+```
+这里的提示就是说list的所有权发送了移动，list失去了对堆空间值的所有权，他会被回收掉，所以不能再使用了，其实也就是list被回收了，看到了吗？在rust中发送所有权移动的变量，就会被回收掉
+这里我们就可以发现了，这不就是回收内存吗？回想一下go是怎么做内存回收的? 没错就是GC，go使用的是三色标记法+混合屏障机制，来实现的垃圾回收，虽然go的垃圾回收机制已经非常优秀了，但是其本质背后还是有GC程序的运行，并且会后极短的STW，但这仍然带来开销
+我们知道主流的内存回收方式有：
+* 以cpp为代表的手动回收，但是这对开发者造成了较大的压力
+* 以go/java为代表的GC机制，叫内存回收交给GC，开发者无需担心内存回收问题了
+* 以rust为代表的所有权机制，当某一个变量的所有权移动后，rust会自动调用drop函数将其回收
+当然上述描述的都是堆内存
+#### 所有权原则
+下面是所有权的三条铁律：
+* Rust 中的每个值都有一个变量，称为其所有者。
+* 一次只能有一个所有者。
+* 当所有者不在程序运行范围时，该值将被删除。
+下面我们以String这种数据类型为例，来介绍所有权，我什么使用String类型呢，因为他是分配在堆内存上的，来看这个示例：
+```rust
+let s1 = String::from("hello");
+```
+在这行代码中，他们在计算机中的结构是怎么样的呢？ 直接看下图：
+```mermaid
+graph TD
+    subgraph 堆上的 String 结构
+        C[栈内存] --> D[指针 ptr]
+        C --> E[长度 len]
+        C --> F[容量 capacity]
+        D --> G[堆内存]
+        G --> H1[“H”]
+        G --> H2[“e”]
+        G --> H3[“l”]
+        G --> H4[“l”]
+        G --> H5[“o”]
+    end
+```
+可以看到s1变量本身分配在栈上，然后有三个字段，指向堆内存值的一个指针，s1的长度，s1所指向堆数据的容量，想想看是不是和go的slice非常非常相似，
+看这张图：
+```mermaid
+graph LR
+    stack[栈帧 Stack Frame]
+    heap[堆内存 Heap]
+
+    stack --> ptr[ptr: 0x00A0]
+    stack --> len[len: 5]
+    stack --> cap[capacity: 5]
+
+    ptr --> heap
+    heap --> |地址 0x00A0| h["H"]
+    heap --> |地址 0x00A1| e["e"]
+    heap --> |地址 0x00A2| l1["l"]
+    heap --> |地址 0x00A3| l2["l"]
+    heap --> |地址 0x00A4| o["o"]
+```
+* ptr：指向堆内存中字符串数据的指针
+* len：当前字符串实际长度（字节数）
+* capacity：String 从操作系统分配的总容量
+
+此时也就是s1拥有"hello"这个数据的所有权
+
+#### 所有权移动
+接着看代码：
+```rust
+let s1 = String::from("hello"); // 转移前
+let s2 = s1; // 发生转移
+// s1失效
+// println!("{}", s1); // 错误！s1 已失效
+```
+此时数据"hello"的所有权从s1移动到了s2, 然后s1变量就被回收了，可以看下图，发生什么了：
+```mermaid
+graph LR
+    subgraph 转移前
+        A[栈帧 main]
+        A --> s1["s1: String"]
+        s1 --> heap[堆数据]
+    end
+    
+    subgraph 转移后
+        B[栈帧 main]
+        B --> s2["s2: String"]
+        s2 --> heap
+        s1_faded["s1: 已失效"]:::faded
+    end
+    
+    classDef faded fill:#eee, color:#999, stroke:#ccc
+    
+    click heap "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html" "所有权文档"
+```
+看看这是不是很符合三原则，那如果我们想使用s1应该怎么办呢？接下来看看clon
+
+#### clone深拷贝
+我觉得clone这个词用的非常好，很直观，就是clone一份，来看示例：
+```rust
+let s1 = String::from("hello");
+let s2 = s1.clone(); // 创建新的堆分配
+
+println!("{} {}", s1, s2); // 两个都有效
+```
+我们看他内部发生什么了：
+```mermaid
+graph LR
+    subgraph 栈内存 Stack
+        A[栈帧 main]
+    end
+    
+    subgraph String s1 结构
+        B1["s1: String 结构<br>ptr: 0x1000<br>len: 5<br>cap: 5"]
+    end
+    
+    subgraph String s2 结构
+        B2["s2: String 结构<br>ptr: 0x2000<br>len: 5<br>cap: 5"]
+    end
+    
+    subgraph 堆内存 Heap
+        C1[0x1000: 'H']
+        C2[0x1001: 'e']
+        C3[0x1002: 'l']
+        C4[0x1003: 'l']
+        C5[0x1004: 'o']
+        
+        D1[0x2000: 'H']
+        D2[0x2001: 'e']
+        D3[0x2002: 'l']
+        D4[0x2003: 'l']
+        D5[0x2004: 'o']
+    end
+    
+    A --> B1
+    A --> B2
+    B1 --> C1
+    B2 --> D1
+    
+    classDef string fill:#e6f7ff,stroke:#1890ff,stroke-width:2px
+    class B1,B2 string
+```
+当我们使用clone后，会将"hello"值在内存中重新深拷贝一份，然后将其所有权交给s2,此时的s1和s2他们没有半毛钱关系了，再来看看这个示例：
+```rust
+let s1 = String::from("hello");
+let s2 = s1.clone(); // 创建新的堆分配
+s2.push_str(" World!"); // 给s2追加字符串
+println!("{} {}", s1, s2); // 两个都有效
+```
+```mermaid
+graph LR
+    subgraph 栈内存 Stack
+        A[栈帧 main]
+    end
+    
+    subgraph String s1 结构
+        B1["s1: String<br>ptr: 0x1000<br>len: 5<br>cap: 5"]
+    end
+    
+    subgraph String s2 结构
+        B2["s2: String<br>ptr: 0x2000<br>len: 11<br>cap: 10+ (可能重新分配)"]
+    end
+    
+    subgraph 堆内存 Heap
+        C1[0x1000: 'H']
+        C2[0x1001: 'e']
+        C3[0x1002: 'l']
+        C4[0x1003: 'l']
+        C5[0x1004: 'o']
+        
+        D1[0x2000: 'H']
+        D2[0x2001: 'e']
+        D3[0x2002: 'l']
+        D4[0x2003: 'l']
+        D5[0x2004: 'o']
+        D6[0x2005: ' ']
+        D7[0x2006: 'W']
+        D8[0x2007: 'o']
+        D9[0x2008: 'r']
+        D10[0x2009: 'l']
+        D11[0x200A: 'd']
+        D12[0x200B: '!']
+    end
+    
+    A --> B1
+    A --> B2
+    B1 --> C1
+    B2 --> D1
+    
+    class s2Changed fill:#fffbe6,stroke:#faad14
+    
+    classDef changed fill:#fffbe6,stroke:#faad14,stroke-width:2px
+    class B2 changed
+```
+可以看到变量有用某一个值的所有权时，是可以随心所欲的，可以所以write和read，这看上去很符合所有权这个词
+
+
+#### 所有权作用范围
+还是将通过图文结合的方式详细解释 Rust 所有权的作用范围，使用 String 类型作为示例，先看代码：
+```rust
+fn main() {
+    let s: String = String::from("global");
+}
+```
+作用范围如下如所示：
+```mermaid
+graph TB
+    subgraph 外部作用域
+        A["let s = String::from('global');"] --> B[作用域开始]
+        B --> C["外部访问:<br>s 有效"]
+        B --> D{内部作用域}
+        D --> E["{ // 内部作用域开始"]
+        E --> F["let inner = String::from('local');"]
+        E --> G["内部访问:<br>s 有效, inner 有效"]
+        E --> H["} // 内部作用域结束"]
+        H --> I["inner 被释放<br>所有权结束"]
+        I --> J["外部访问:<br>s 有效, inner 无效"]
+        J --> K["} // 外部作用域结束"]
+        K --> L["s 被释放"]
+    end
+```
+再来看这个示例：
+```rust
+fn main() {
+    // ===== 外部作用域开始 =====
+    let s = String::from("global"); // 所有者 s 进入作用域
+    
+    {
+        // ===== 内部作用域开始 =====
+        let inner = String::from("local"); // 所有者 inner 进入作用域
+        
+        println!("s: {}", s); // 有效
+        println!("inner: {}", inner); // 有效
+        
+        // ===== 内部作用域结束 =====
+    } // inner 在此被释放
+    
+    println!("s: {}", s); // 仍然有效
+    // println!("inner: {}", inner); // 错误！inner 已离开作用域
+    
+    // ===== 外部作用域结束 =====
+} // s 在此被释放
+```
+作用范围如下图所示：
+```mermaid
+graph LR
+    subgraph 内部作用域开始
+        S1["s: String<br>指针 | len | cap<br>0x1000 | 5 | 5"] --> H1[堆内存 0x1000<br>'g','l','o','b','a','l']
+        I1["inner: String<br>指针 | len | cap<br>0x2000 | 5 | 5"] --> H2[堆内存 0x2000<br>'l','o','c','a','l']
+    end
+    
+    subgraph 内部作用域结束
+        S2["s: String<br>指针 | len | cap<br>0x1000 | 5 | 5"] --> H1
+        I2["inner: ❌<br>已失效"] --> HH[堆内存 0x2000 ⚠️ 已释放]
+    end
+    
+    subgraph 外部作用域结束
+        S3["s: ❌<br>已失效"] --> H1_1[堆内存 0x1000 ⚠️ 已释放]
+    end
+
+    style H1 fill:#e6f7ff,stroke:#1890ff
+    style H2 fill:#f6ffed,stroke:#52c41a
+    style H1_1 fill:#fff2f0,stroke:#ff4d4f
+    style HH fill:#fff2f0,stroke:#ff4d4f
+    style I2 fill:#fff2f0,stroke:#ff4d4f
+    style S3 fill:#fff2f0,stroke:#ff4d4f
+```
+* 外层作用域：main 函数范围
+* 内层作用域：由花括号 {} 创建的子作用域
+
+##### 所有权时间线
+```mermaid
+timeline
+  title 所有权生命周期
+  时间点1: s 创建
+  时间点2: inner 创建
+  时间点3: inner 销毁（退出内层作用域）
+  时间点4: s 销毁（退出外层作用域）
+```
+
+#### 函数入参所有权
+上面我们了解所有权的原理，简单场景，下面我们来看看，将所有权变量传入函数中会发生什么，看示例：
+```rust
+fn main() {
+    let s = String::from("hello");
+    let len = get_len(s);
+
+    println!("{} len: {}", s, len);
+}
+
+fn get_len(str: String) -> usize {
+    str.len()
+}
+```
+你可以尝试编译一下这个代码看看会发送什么？
+答案：
+```
+> rustc main.rs 
+error[E0382]: borrow of moved value: `s`
+ --> demo1.rs:5:28
+  |
+2 |     let s = String::from("hello");
+  |         - move occurs because `s` has type `String`, which does not implement the `Copy` trait
+3 |     let len = get_len(s);
+  |                       - value moved here
+4 |
+5 |     println!("{} len: {}", s, len);
+  |                            ^ value borrowed here after move
+  |
+note: consider changing this parameter type in function `get_len` to borrow instead if owning the value isn't necessary
+ --> demo1.rs:8:17
+  |
+8 | fn get_len(str: String) -> usize {
+  |    -------      ^^^^^^ this parameter takes ownership of the value
+  |    |
+  |    in this function
+  = note: this error originates in the macro `$crate::format_args_nl` which comes from the expansion of the macro `println` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: consider cloning the value if the performance cost is acceptable
+  |
+3 |     let len = get_len(s.clone());
+  |                        ++++++++
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0382`.
+
+```
+没错，所有权又发生转移了，来看看原理：
+```rust
+let len = get_len(s); //这里将s的所有权给到函数中的str了
+```
+此时str拥有了“hello”的所有权，然后他就可以在函数中所以修改这个值了，最后他返回了字符串的长度
+str所有权变量的作用范围在函数内，离开函数str被drop
+```rust
+fn get_len(str: String) -> usize {
+    str.len()
+}
+```
+当我们再想使用s的所有权移动到函数的str中，如果再直接使用s看到就不行了
+可以再看看这个图：
+```mermaid
+graph LR
+    subgraph 步骤1: 创建s
+        S1[栈帧 main] --> S1_s["s: String<br>ptr: 0x1000<br>len: 5<br>cap: 5"]
+        S1_s --> H1[堆内存 0x1000<br>'h','e','l','l','o']
+    end
+    
+    subgraph 步骤2: 调用get_lens 所有权转移
+        S2[栈帧 main] --> S2_s["s: <span style='color:red'><b>已失效</b></span>"]
+        S2a[栈帧 get_len] --> S2a_str["str: String<br>ptr: 0x1000<br>len: 5<br>cap: 5"]
+        S2a_str --> H1
+    end
+    
+    subgraph 步骤3: get_len 返回后
+        S3[栈帧 main] --> S3_len["len: 5"]
+        S3_s["s: <span style='color:red'><b>已失效</b></span>"]:::invalid
+        H1_free[堆内存 0x1000<br><span style='color:red'>已释放</span>]:::invalid
+    end
+    
+    classDef invalid fill:#fff2f0,stroke:#ff4d4f,stroke-width:2px
+    classDef active fill:#e6f7ff,stroke:#1890ff
+    
+    class S1_s,S2a_str active
+```
+
+
+
+
+
+
+
+#### 函数返回值所有权
+接下来看看返回值，我们可以将str返回，然后函数将其str的所有权转移给s1
+```rust
+fn main() {
+    let s = String::from("hello");
+    let (s1, len) = get_len(s); // 返回所有权
+    
+    println!("{} len: {}", s1, len); // 正确！
+}
+
+fn get_len(str: String) -> (String, usize) {
+    let len = str.len();
+    (str, len) // 返回所有权
+}
+```
+如何所示：
+```mermaid
+graph LR
+    subgraph 返回所有权
+        S1[main] -- s --> get_len
+        get_len -- s1, len --> S2[main]
+        S2 --> S3[println!使用 s1]
+    end
+```
+
+
+
+
+
+
+
+
+
 
 
 
