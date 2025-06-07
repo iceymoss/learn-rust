@@ -1444,450 +1444,523 @@ graph LR
     end
 ```
 
-### cargo
-cargo是rust的依赖依赖管理，但是功能远比依赖管理强，你可以看这一篇文章：https://learnku.com/articles/90035
 
-### 所有权
-接下来来从始至终都贯穿rust的所有权，这里rust最核心的内容之一，首先我们要知道一个问题，为什么rust要使用所有权？先来看这个示例：
+
+仔细想想这个是不是很麻烦啊，搞不好所有函数都需要将所有权传来传去的，有没有类似go传指针或者引用这种说法呢，没错是有的
+#### 借用
+借用就是不改变变量的所有权问题，而借用分为两种状态：
+* 不可变借用：不可以改变借用数据的值
+* 可变借用：可以改变借用数据的值
+
+对于这两种借用可以这样理解，比如说我们借书，你借来的书别人授权了你可以在书上写写画画做标注，这就叫可变借用
+但是别人不同意要你做标注，你就只能好好的读，不能改任何东西，这就是不可变借用，很好理解吧
+接下来，我们使用 String 类型作为示例，重点关注不可变借用（&T）和可变借用（&mut T）的区别和规则。
+##### 不可变借用
+不可变借用的语法比较简单，```&T```这样就可以了，就是对应变量前面加了一个```&```符号，还是使用之前所有权的示例：
 ```rust
 fn main() {
-    let mut list = vec![10, 2, 111, 34, 12, 43];
-    for i in list { // 会移动所有权
-        println!("{}", i);
-    }
-
-    let l = list; // 注意这里
+    let s = String::from("hello");
+    let len = calculate_length(&s); // 不可变借用：&s
+    
+    println!("String: {}, Length: {}", s, len); // 可以继续使用 s
 }
-```
-当我们编译时就会发现：
-```
-> rustc range.rs
-error[E0382]: use of moved value: `list`
-   --> range.rs:44:14
-    |
-19  |     let list = vec![10, 2, 111, 34, 12, 43];
-    |         ---- move occurs because `list` has type `Vec<i32>`, which does not implement the `Copy` trait
-...
-39  |         for i in list { // 会移动所有权
-    |                  ---- `list` moved due to this implicit call to `.into_iter()`
-...
-44  |     let _l = list;
-    |              ^^^^ value used here after move
-    |
-note: `into_iter` takes ownership of the receiver `self`, which moves `list`
-   --> /home/jeff/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/collect.rs:313:18
-    |
-313 |     fn into_iter(self) -> Self::IntoIter;
-    |                  ^^^^
-help: consider iterating over a slice of the `Vec<i32>`'s content to avoid moving into the `for` loop
-    |
-39  |         for i in &list { // 会移动所有权
-    |                  +
 
-error: aborting due to 1 previous error
-
-For more information about this error, try `rustc --explain E0382`.
+fn calculate_length(str: &String) -> usize {
+    // str 是一个指向 s 的引用
+    str.len()
+} // 引用离开作用域，但不会释放数据
 ```
-这里的提示就是说list的所有权发送了移动，list失去了对堆空间值的所有权，他会被回收掉，所以不能再使用了，其实也就是list被回收了，看到了吗？在rust中发送所有权移动的变量，就会被回收掉
-这里我们就可以发现了，这不就是回收内存吗？回想一下go是怎么做内存回收的? 没错就是GC，go使用的是三色标记法+混合屏障机制，来实现的垃圾回收，虽然go的垃圾回收机制已经非常优秀了，但是其本质背后还是有GC程序的运行，并且会后极短的STW，但这仍然带来开销
-我们知道主流的内存回收方式有：
-* 以cpp为代表的手动回收，但是这对开发者造成了较大的压力
-* 以go/java为代表的GC机制，叫内存回收交给GC，开发者无需担心内存回收问题了
-* 以rust为代表的所有权机制，当某一个变量的所有权移动后，rust会自动调用drop函数将其回收
-当然上述描述的都是堆内存
-#### 所有权原则
-下面是所有权的三条铁律：
-* Rust 中的每个值都有一个变量，称为其所有者。
-* 一次只能有一个所有者。
-* 当所有者不在程序运行范围时，该值将被删除。
-下面我们以String这种数据类型为例，来介绍所有权，我什么使用String类型呢，因为他是分配在堆内存上的，来看这个示例：
-```rust
-let s1 = String::from("hello");
-```
-在这行代码中，他们在计算机中的结构是怎么样的呢？ 直接看下图：
-```mermaid
-graph TD
-    subgraph 堆上的 String 结构
-        C[栈内存] --> D[指针 ptr]
-        C --> E[长度 len]
-        C --> F[容量 capacity]
-        D --> G[堆内存]
-        G --> H1[“H”]
-        G --> H2[“e”]
-        G --> H3[“l”]
-        G --> H4[“l”]
-        G --> H5[“o”]
-    end
-```
-可以看到s1变量本身分配在栈上，然后有三个字段，指向堆内存值的一个指针，s1的长度，s1所指向堆数据的容量，想想看是不是和go的slice非常非常相似，
-看这张图：
-```mermaid
-graph LR
-    stack[栈帧 Stack Frame]
-    heap[堆内存 Heap]
-
-    stack --> ptr[ptr: 0x00A0]
-    stack --> len[len: 5]
-    stack --> cap[capacity: 5]
-
-    ptr --> heap
-    heap --> |地址 0x00A0| h["H"]
-    heap --> |地址 0x00A1| e["e"]
-    heap --> |地址 0x00A2| l1["l"]
-    heap --> |地址 0x00A3| l2["l"]
-    heap --> |地址 0x00A4| o["o"]
-```
-* ptr：指向堆内存中字符串数据的指针
-* len：当前字符串实际长度（字节数）
-* capacity：String 从操作系统分配的总容量
-
-此时也就是s1拥有"hello"这个数据的所有权
-
-#### 所有权移动
-接着看代码：
-```rust
-let s1 = String::from("hello"); // 转移前
-let s2 = s1; // 发生转移
-// s1失效
-// println!("{}", s1); // 错误！s1 已失效
-```
-此时数据"hello"的所有权从s1移动到了s2, 然后s1变量就被回收了，可以看下图，发生什么了：
-```mermaid
-graph LR
-    subgraph 转移前
-        A[栈帧 main]
-        A --> s1["s1: String"]
-        s1 --> heap[堆数据]
-    end
-    
-    subgraph 转移后
-        B[栈帧 main]
-        B --> s2["s2: String"]
-        s2 --> heap
-        s1_faded["s1: 已失效"]:::faded
-    end
-    
-    classDef faded fill:#eee, color:#999, stroke:#ccc
-    
-    click heap "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html" "所有权文档"
-```
-看看这是不是很符合三原则，那如果我们想使用s1应该怎么办呢？接下来看看clon
-
-#### clone深拷贝
-我觉得clone这个词用的非常好，很直观，就是clone一份，来看示例：
-```rust
-let s1 = String::from("hello");
-let s2 = s1.clone(); // 创建新的堆分配
-
-println!("{} {}", s1, s2); // 两个都有效
-```
-我们看他内部发生什么了：
+来看看发送了什么，看图：
 ```mermaid
 graph LR
     subgraph 栈内存 Stack
-        A[栈帧 main]
-    end
-    
-    subgraph String s1 结构
-        B1["s1: String 结构<br>ptr: 0x1000<br>len: 5<br>cap: 5"]
-    end
-    
-    subgraph String s2 结构
-        B2["s2: String 结构<br>ptr: 0x2000<br>len: 5<br>cap: 5"]
+        A[main 栈帧]
+        A --> s["s: String<br>ptr: 0x1000<br>len: 5<br>cap: 5"]
+        
+        subgraph calculate_length 栈帧
+            B["str: &String"]
+        end
     end
     
     subgraph 堆内存 Heap
-        C1[0x1000: 'H']
-        C2[0x1001: 'e']
-        C3[0x1002: 'l']
-        C4[0x1003: 'l']
-        C5[0x1004: 'o']
-        
-        D1[0x2000: 'H']
-        D2[0x2001: 'e']
-        D3[0x2002: 'l']
-        D4[0x2003: 'l']
-        D5[0x2004: 'o']
+        C[0x1000: 'h']
+        C --> D[0x1001: 'e']
+        D --> E[0x1002: 'l']
+        E --> F[0x1003: 'l']
+        F --> G[0x1004: 'o']
     end
     
-    A --> B1
-    A --> B2
-    B1 --> C1
-    B2 --> D1
+    s -->|通过 ptr 访问| C
+    B -.->|直接指向栈上的 s| s
     
-    classDef string fill:#e6f7ff,stroke:#1890ff,stroke-width:2px
-    class B1,B2 string
+    style B stroke:#00f,stroke-width:2px
+    style s fill:#e6f7ff,stroke:#1890ff
+    linkStyle 2 stroke-dasharray: 5,5
 ```
-当我们使用clone后，会将"hello"值在内存中重新深拷贝一份，然后将其所有权交给s2,此时的s1和s2他们没有半毛钱关系了，再来看看这个示例：
-```rust
-let s1 = String::from("hello");
-let s2 = s1.clone(); // 创建新的堆分配
-s2.push_str(" World!"); // 给s2追加字符串
-println!("{} {}", s1, s2); // 两个都有效
-```
-```mermaid
-graph LR
-    subgraph 栈内存 Stack
-        A[栈帧 main]
-    end
-    
-    subgraph String s1 结构
-        B1["s1: String<br>ptr: 0x1000<br>len: 5<br>cap: 5"]
-    end
-    
-    subgraph String s2 结构
-        B2["s2: String<br>ptr: 0x2000<br>len: 11<br>cap: 10+ (可能重新分配)"]
-    end
-    
-    subgraph 堆内存 Heap
-        C1[0x1000: 'H']
-        C2[0x1001: 'e']
-        C3[0x1002: 'l']
-        C4[0x1003: 'l']
-        C5[0x1004: 'o']
-        
-        D1[0x2000: 'H']
-        D2[0x2001: 'e']
-        D3[0x2002: 'l']
-        D4[0x2003: 'l']
-        D5[0x2004: 'o']
-        D6[0x2005: ' ']
-        D7[0x2006: 'W']
-        D8[0x2007: 'o']
-        D9[0x2008: 'r']
-        D10[0x2009: 'l']
-        D11[0x200A: 'd']
-        D12[0x200B: '!']
-    end
-    
-    A --> B1
-    A --> B2
-    B1 --> C1
-    B2 --> D1
-    
-    class s2Changed fill:#fffbe6,stroke:#faad14
-    
-    classDef changed fill:#fffbe6,stroke:#faad14,stroke-width:2px
-    class B2 changed
-```
-可以看到变量有用某一个值的所有权时，是可以随心所欲的，可以所以write和read，这看上去很符合所有权这个词
-
-
-#### 所有权作用范围
-还是将通过图文结合的方式详细解释 Rust 所有权的作用范围，使用 String 类型作为示例，先看代码：
+我们可以看到，这个这个过程始终是有用字符串的所有权的
+来看一个复杂的示例：
 ```rust
 fn main() {
-    let s: String = String::from("global");
+    let s = String::from("hello");
+    let str = &s; // 不可变借用：&s,借用范围开始
+
+    println!("s: {}", s); // 打印所有权变量
+
+    let str2 = &str; // 对str进行引用
+    println!("str2: {}", str2);
+
+    let str_temp = str; // 将str绑定非str_temp
+    println!("str_temp: {}", str_temp);
+
+
+    let str3 = &str2; // 对str2进行引用
+    println!("str3: {}", str3);
+
+    let str4 = &str3; // 对str3进行引用
+    println!("str4: {}", str4);
+
+    println!("str: {}", str);
 }
 ```
-作用范围如下如所示：
+输出：
+```rust
+> ./main       
+s: hello
+str2: hello
+str_temp: hello
+str3: hello
+str4: hello
+str: hello
+```
+上面的引用关系比较复杂，我们可以看看这张图：
+
 ```mermaid
 graph TB
-    subgraph 外部作用域
-        A["let s = String::from('global');"] --> B[作用域开始]
-        B --> C["外部访问:<br>s 有效"]
-        B --> D{内部作用域}
-        D --> E["{ // 内部作用域开始"]
-        E --> F["let inner = String::from('local');"]
-        E --> G["内部访问:<br>s 有效, inner 有效"]
-        E --> H["} // 内部作用域结束"]
-        H --> I["inner 被释放<br>所有权结束"]
-        I --> J["外部访问:<br>s 有效, inner 无效"]
-        J --> K["} // 外部作用域结束"]
-        K --> L["s 被释放"]
-    end
-```
-再来看这个示例：
-```rust
-fn main() {
-    // ===== 外部作用域开始 =====
-    let s = String::from("global"); // 所有者 s 进入作用域
-    
-    {
-        // ===== 内部作用域开始 =====
-        let inner = String::from("local"); // 所有者 inner 进入作用域
+    subgraph 栈内存 Stack
+        %% 原始变量
+        A[main 栈帧]
+        A --> s["s: String<br>ptr: 0x1000<br>len: 5<br>cap: 5"]
         
-        println!("s: {}", s); // 有效
-        println!("inner: {}", inner); // 有效
+        %% 一级引用
+        A --> str["str: &String<br>指向 s"]
         
-        // ===== 内部作用域结束 =====
-    } // inner 在此被释放
+        %% 二级引用
+        A --> str2["str2: &&String<br>指向 str"]
+        
+        %% 临时绑定
+        A --> str_temp["str_temp: &String<br>与 str 相同"]
+        
+        %% 三级引用
+        A --> str3["str3: &&&String<br>指向 str2"]
+        
+        %% 四级引用
+        A --> str4["str4: &&&&String<br>指向 str3"]
+    end
     
-    println!("s: {}", s); // 仍然有效
-    // println!("inner: {}", inner); // 错误！inner 已离开作用域
+    subgraph 堆内存 Heap
+        HeapData[0x1000: 'h','e','l','l','o']
+    end
     
-    // ===== 外部作用域结束 =====
-} // s 在此被释放
+    %% 连接关系
+    s --> HeapData
+    str -.-> s
+    str2 -.-> str
+    str_temp -.-> s
+    str3 -.-> str2
+    str4 -.-> str3
+    
+    %% 样式定义
+    style s fill:#e6f7ff,stroke:#1890ff,stroke-width:2px
+    style str fill:#d9f7be,stroke:#52c41a,stroke-width:1.5px
+    style str_temp fill:#d9f7be,stroke:#52c41a,stroke-width:1.5px
+    style str2 fill:#ffd8bf,stroke:#fa8c16,stroke-width:1.5px
+    style str3 fill:#ffd6e7,stroke:#ff85c0,stroke-width:1.5px
+    style str4 fill:#e6f7ff,stroke:#597ef7,stroke-width:1.5px
+    style HeapData fill:#f0f5ff,stroke:#adc6ff
 ```
-作用范围如下图所示：
-```mermaid
-graph LR
-    subgraph 内部作用域开始
-        S1["s: String<br>指针 | len | cap<br>0x1000 | 5 | 5"] --> H1[堆内存 0x1000<br>'g','l','o','b','a','l']
-        I1["inner: String<br>指针 | len | cap<br>0x2000 | 5 | 5"] --> H2[堆内存 0x2000<br>'l','o','c','a','l']
-    end
-    
-    subgraph 内部作用域结束
-        S2["s: String<br>指针 | len | cap<br>0x1000 | 5 | 5"] --> H1
-        I2["inner: ❌<br>已失效"] --> HH[堆内存 0x2000 ⚠️ 已释放]
-    end
-    
-    subgraph 外部作用域结束
-        S3["s: ❌<br>已失效"] --> H1_1[堆内存 0x1000 ⚠️ 已释放]
-    end
-
-    style H1 fill:#e6f7ff,stroke:#1890ff
-    style H2 fill:#f6ffed,stroke:#52c41a
-    style H1_1 fill:#fff2f0,stroke:#ff4d4f
-    style HH fill:#fff2f0,stroke:#ff4d4f
-    style I2 fill:#fff2f0,stroke:#ff4d4f
-    style S3 fill:#fff2f0,stroke:#ff4d4f
-```
-* 外层作用域：main 函数范围
-* 内层作用域：由花括号 {} 创建的子作用域
-
-##### 所有权时间线
+我们可以看看他们的作用范围：
 ```mermaid
 timeline
-  title 所有权生命周期
-  时间点1: s 创建
-  时间点2: inner 创建
-  时间点3: inner 销毁（退出内层作用域）
-  时间点4: s 销毁（退出外层作用域）
+  title 生命周期层级
+  s : 整个作用域
+  str : 直到最后一次使用
+  str2 : 直到最后一次使用
+  str_temp : 直到最后一次使用
+  str3 : 直到最后一次使用
+  str4 : 直到最后一次使用
 ```
 
-#### 函数入参所有权
-上面我们了解所有权的原理，简单场景，下面我们来看看，将所有权变量传入函数中会发生什么，看示例：
+这样是不是清晰了很多，这里我们看到不管是多少级引用，我们都可以使用原始的多级引用变量直接打印，不需要做解引用操作，可以对比一下：
+
+
 ```rust
 fn main() {
     let s = String::from("hello");
-    let len = get_len(s);
+    let str = &s; // 不可变借用：&s,借用范围开始
 
-    println!("{} len: {}", s, len);
-}
+    println!("s: {}", s); // 打印所有权变量
 
-fn get_len(str: String) -> usize {
-    str.len()
+    let str2 = &str; // 对str进行引用
+    println!("str2: {}", str2);
+
+    let str_temp = str; // 将str绑定非str_temp
+    println!("str_temp: {}", str_temp);
+
+
+    let str3 = &str2; // 对str2进行引用
+    println!("str3: {}", str3);
+
+    let str4 = &str3; // 对str3进行引用
+    println!("str4: {}", str4);
+
+    println!("str: {}", str);
+
+    // 所有以下表达式访问相同数据
+    println!("{}", s);        // 原始变量
+    println!("{}", str);      // 一级引用
+    println!("{}", *str2);    // 二级引用解引用为一级
+    println!("{}", **str3);   // 三级引用解引用两次
+    println!("{}", ***str4);  // 四级引用解引用三次
 }
 ```
-你可以尝试编译一下这个代码看看会发送什么？
-答案：
+其实我们从上面示例中可以看出，rust的不可变借用可以有做个，包括这不可变借用期间，我们仍然可以访问所有权变量，但是不能修改，这是需要注意的，例如下面：
+```rust
+fn main() {
+    let mut s = String::from("hello");
+    let str = &s;
+
+    s.push_str(", world");
+
+    println!("str: {}", str)
+}
 ```
-> rustc main.rs 
-error[E0382]: borrow of moved value: `s`
- --> demo1.rs:5:28
+编译报错：
+```
+> rustc main.rs
+error[E0502]: cannot borrow `s` as mutable because it is also borrowed as immutable
+ --> demo8.rs:5:5
   |
-2 |     let s = String::from("hello");
-  |         - move occurs because `s` has type `String`, which does not implement the `Copy` trait
-3 |     let len = get_len(s);
-  |                       - value moved here
+3 |     let str = &s;
+  |               -- immutable borrow occurs here
 4 |
-5 |     println!("{} len: {}", s, len);
-  |                            ^ value borrowed here after move
-  |
-note: consider changing this parameter type in function `get_len` to borrow instead if owning the value isn't necessary
- --> demo1.rs:8:17
-  |
-8 | fn get_len(str: String) -> usize {
-  |    -------      ^^^^^^ this parameter takes ownership of the value
-  |    |
-  |    in this function
-  = note: this error originates in the macro `$crate::format_args_nl` which comes from the expansion of the macro `println` (in Nightly builds, run with -Z macro-backtrace for more info)
-help: consider cloning the value if the performance cost is acceptable
-  |
-3 |     let len = get_len(s.clone());
-  |                        ++++++++
+5 |     s.push_str(", world");
+  |     ^^^^^^^^^^^^^^^^^^^^^ mutable borrow occurs here
+6 |
+7 |     println!("str: {}", str)
+  |                         --- immutable borrow later used here
 
 error: aborting due to 1 previous error
 
-For more information about this error, try `rustc --explain E0382`.
+For more information about this error, try `rustc --explain E0502`.
 
 ```
-没错，所有权又发生转移了，来看看原理：
-```rust
-let len = get_len(s); //这里将s的所有权给到函数中的str了
-```
-此时str拥有了“hello”的所有权，然后他就可以在函数中所以修改这个值了，最后他返回了字符串的长度
-str所有权变量的作用范围在函数内，离开函数str被drop
-```rust
-fn get_len(str: String) -> usize {
-    str.len()
-}
-```
-当我们再想使用s的所有权移动到函数的str中，如果再直接使用s看到就不行了
-可以再看看这个图：
-```mermaid
-graph LR
-    subgraph 步骤1: 创建s
-        S1[栈帧 main] --> S1_s["s: String<br>ptr: 0x1000<br>len: 5<br>cap: 5"]
-        S1_s --> H1[堆内存 0x1000<br>'h','e','l','l','o']
-    end
-    
-    subgraph 步骤2: 调用get_lens 所有权转移
-        S2[栈帧 main] --> S2_s["s: <span style='color:red'><b>已失效</b></span>"]
-        S2a[栈帧 get_len] --> S2a_str["str: String<br>ptr: 0x1000<br>len: 5<br>cap: 5"]
-        S2a_str --> H1
-    end
-    
-    subgraph 步骤3: get_len 返回后
-        S3[栈帧 main] --> S3_len["len: 5"]
-        S3_s["s: <span style='color:red'><b>已失效</b></span>"]:::invalid
-        H1_free[堆内存 0x1000<br><span style='color:red'>已释放</span>]:::invalid
-    end
-    
-    classDef invalid fill:#fff2f0,stroke:#ff4d4f,stroke-width:2px
-    classDef active fill:#e6f7ff,stroke:#1890ff
-    
-    class S1_s,S2a_str active
-```
-
-
-
-
-
-
-
-#### 函数返回值所有权
-接下来看看返回值，我们可以将str返回，然后函数将其str的所有权转移给s1
+不能改变s,因为他已经被借用为不可变引用了
+#### 悬垂引用
+在将可变借用前先补充一个点：悬垂引用
+悬垂引用（Dangling References）是编程中常见的危险错误之一，也是 Rust 所有权系统重点解决的问题。悬垂引用指的是引用指向的内存已被释放，但引用本身仍被使用的情况。
+看这个示例：
 ```rust
 fn main() {
-    let s = String::from("hello");
-    let (s1, len) = get_len(s); // 返回所有权
-    
-    println!("{} len: {}", s1, len); // 正确！
-}
-
-fn get_len(str: String) -> (String, usize) {
-    let len = str.len();
-    (str, len) // 返回所有权
+    let r: &String;
+    {
+        let x = String::from("hello");
+        r = &x; // x离开作用域后，x被释放，r将成为悬垂引用
+    } // x 在此被释放
+    println!("r: {}", r); // 错误！使用悬垂引用
 }
 ```
-如何所示：
+编译报错：
+```
+> rustc main.rs 
+error[E0597]: `x` does not live long enough
+ --> demo9.rs:5:13
+  |
+4 |         let x = String::from("hello");
+  |             - binding `x` declared here
+5 |         r = &x; // x 离开作用域后，r 将成为悬垂引用
+  |             ^^ borrowed value does not live long enough
+6 |     } // x 在此被释放
+  |     - `x` dropped here while still borrowed
+7 |     println!("r: {}", r); // 错误！使用悬垂引用
+  |                       - borrow later used here
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0597`.
+```
+再看一个示例：
+```rust
+fn dangling_reference() -> &String {
+    let s = String::from("danger!");
+    &s // 返回局部变量的引用
+} // s 被释放
+
+fn main() {
+    let r = dangling_reference();
+    println!("{}", r);
+}
+```
+时序图：
+```mermaid
+sequenceDiagram
+    participant 主函数
+    participant 危险函数
+    participant 堆内存
+    
+    主函数 ->> 危险函数: 调用
+    危险函数 ->> 堆内存: 分配内存 (s)
+    危险函数 -->> 主函数: 返回 &s
+    危险函数 -x 堆内存: 释放内存 (s)
+    主函数 ->> 堆内存: 通过 r 访问 → 危险！
+```
+
+#### 可变借用
+可以借用，我们可以在不改变变量所有权的情况下对数据进行修改，使用关键字```&mut T```，示例：
+```rust
+fn main() {
+    let mut s = String::from("hello");
+    let str = &mut s;
+    str.push_str(", world!");
+
+    println!("str: {}", str);
+    println!("s: {}", s);
+}
+```
+输出：
+```
+> ./main 
+str: hello, world!
+s: hello, world!
+```
+可以看到s被修改了，我们来看看背后的原理：
 ```mermaid
 graph LR
-    subgraph 返回所有权
-        S1[main] -- s --> get_len
-        get_len -- s1, len --> S2[main]
-        S2 --> S3[println!使用 s1]
+    subgraph 栈内存 Stack
+        main[main 栈帧]
+        main --> s["s: mut String<br>ptr: 0x1000<br>len: 5 → 12<br>cap: 5 → 12"]
+        main --> str_ref["str: &mut String<br>指向 s"]
     end
+    
+    subgraph 堆内存 Heap
+        heap_initial[初始堆数据 0x1000: 'h','e','l','l','o']
+        heap_final[修改后堆数据 0x2000: 'h','e','l','l','o',',','w','o','r','l','d','!']
+    end
+    
+    s --> heap_initial
+    str_ref -.->|可变借用期间<br>控制访问| s
+    s -->|修改后| heap_final
+    
+    style s fill:#e6f7ff,stroke:#1890ff
+    style str_ref stroke:#f00,stroke-width:2px
+    linkStyle 3 stroke:#f00,stroke-width:2px
+```
+关键点说明：
+* 可变变量：let mut s 声明 s 为可变
+
+* 独占访问：可变借用 &mut s 期间，独占控制原始变量
+
+* 数据修改：通过借用 str 修改了字符串内容
+
+* 内存变更： 初始容量不足（cap=5），导致重新分配内存
+
+* 指针更新为新的堆地址 (0x2000)长度增加 (len=5→12)
+
+接着看这个示例：
+```rust
+fn main() {
+    let mut s = String::from("hello");
+
+    let r1 = &s; // 不可变借用
+    let r2 = &s; // 不可变借用
+    let r3 = &mut s; // 可变借用
+
+    println!("r1: {}, r2: {}, r3: {}", r1, r2, r3);
+}
+```
+运行这段代码会发送什么呢？
+```
+> rustc main.rs
+error[E0502]: cannot borrow `s` as mutable because it is also borrowed as immutable
+ --> demo4.rs:6:14
+  |
+4 |     let r1 = &s; // 不可变借用
+  |              -- immutable borrow occurs here
+5 |     let r2 = &s; // 不可变借用
+6 |     let r3 = &mut s; // 可变借用
+  |              ^^^^^^ mutable borrow occurs here
+7 |
+8 |     println!("r1: {}, r2: {}, r3: {}", r1, r2, r3);
+  |                                        -- immutable borrow later used here
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0502`.
+
+```
+翻译一下报错：cannot borrow `s` as mutable because it is also borrowed as immutable：不能借用 `s` 作为可变的，因为它也是借用为不可变的
+* immutable borrow occurs here： 不可变借用发送在这里
+* mutable borrow occurs here： 可变借用发送在这里
+
+```mermaid
+graph TD
+    subgraph 时间线
+        A[创建 s] --> B[创建 r1]
+        B --> C[创建 r2]
+        C --> D[尝试 r3]
+        D --> E[打印 r1,r2]
+    end
+    
+    subgraph 作用域
+        F["s: 整个作用域"]
+        G["r1: 第2行开始 - 第7行结束"]
+        H["r2: 第3行开始 - 第7行结束"]
+        I["r3: 第4行尝试创建（失败）"]
+    end
+    
+    subgraph 错误说明
+        J["错误 E0502: 不能同时存在可变和不可变借用"]
+        K["详细: r1 和 r2 在 println! 中仍在使用"]
+    end
+    
+    D --> J
+    J --> K
 ```
 
+看到了吗？可变借用和不可变借用两者冲突了，那为什么会冲突呢？我们需要先了解借用的作用范围
+#### 借用的作用范围
+我们如果将上面的示例，调整一个是不是就可以了呢？
+```rust
+fn main() {
+    let mut s = String::from("hello");
 
+    let r1 = &s; // 不可变借用
+    let r2 = &s; // 不可变借用
 
+    println!("r1: {}, r2: {}", r1, r2);
 
+    let r3 = &mut s;
+    println!("r3: {}", r3);
+}
+```
+这个代码是通过编译的，输出：
+```
+> ./main
+r1: hello, r2: hello
+r3: hello
+```
+我们可以多调整结构版本看看
+```rust
+fn main() {
+    let mut s = String::from("hello");
 
+    let r3 = &mut s;
+    *r3 = String::from("iceymoss");
+    println!("r3: {}", r3);
 
+    let r1 = &s; // 不可变借用
+    let r2 = &s; // 不可变借用
 
+    println!("r1: {}, r2: {}", r1, r2);
+}
+```
+输出：
+```
+> ./main      
+r3: iceymoss
+r1: iceymoss, r2: iceymoss
+```
+或者这样：
+```rust
+fn main() {
+    let mut s = String::from("hello");
 
+    {
+        let r3 = &mut s;
+        *r3 = String::from("iceymoss");
+        println!("r3: {}", r3);
+    }
 
+    let r1 = &s; // 不可变借用
+    let r2 = &s; // 不可变借用
 
+    println!("r1: {}, r2: {}", r1, r2);
+}
+```
+输出：
+```
+> ./main     
+r3: iceymoss
+r1: iceymoss, r2: iceymoss
+```
+再来看一个结构体的示例：
+```rust
+// 可增长字符串结构体
+struct TextBuffer {
+    content: String,
+    version: u32,
+}
 
+impl TextBuffer {
+    // 可变借用函数：添加文本
+    fn append(&mut self, text: &str) {
+        self.content.push_str(text);
+        self.version += 1;
+    }
 
+    // 可变借用函数：清除内容
+    fn clear(&mut self) {
+        self.content.clear();
+        self.version = 0;
+    }
 
+    // 不可变借用函数：获取内容
+    fn get_content(&self) -> &str {
+        &self.content
+    }
 
+    // 获取版本信息: 获取版本号
+    fn get_version(&self) -> u32 {
+        self.version //u32内部实现了Copy的trait在栈是直接copy的
+    }
+}
 
+fn main() {
+    let mut buffer = TextBuffer {
+        content: String::new(),
+        version: 1,
+    };
 
+    buffer.append("Hello");
+    buffer.append(", world!");
 
+    println!("Content: {}, version: {}", buffer.get_content(), buffer.get_version());
+
+    buffer.clear();
+    println!("After clear: {}", buffer.get_content()); // ""
+}
+```
+输出：
+```
+> ./main                                                                                                                                                                                                                                                                                                          
+Content: Hello, world!, version: 3
+After clear:
+```
+图示：
+```mermaid
+
+```
+
+有没有看出什么规律？
+我直接总结吧：
+* 所有权型变量的作用域是从它定义时开始到所属那层花括号结束。
+* 引用型变量的作用域是从它定义起到它最后一次使用时结束。
+* 引用（不可变引用和可变引用）型变量的作用域不会长于所有权变量的作用域。
+* 这是肯定的，不然就会出现悬锤引用，这是典型的内存安全问题。
+* 一个所有权型变量的不可变引用可以同时存在多个，可以复制多份。
+* 一个所有权型变量的可变引用与不可变引用的作用域不能交叠，也可以说不能同时存在。
+* 某个时刻对某个所有权型变量只能存在一个可变引用，不能有超过一个可变借用同时存在，也可以说，对同一个所有权型变量的可变借用之间的作用域不能交叠。
+* 在有借用存在的情况下，不能通过原所有权型变量对值进行更新。
+* 当借用完成后（借用的作用域结束后），物归原主，又可以使用所有权型变量对值做更新操作了。
 
 
 
